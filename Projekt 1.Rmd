@@ -1,0 +1,613 @@
+---
+title: "Projekt 1"
+author: "arek"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#install.packages("Hmisc")
+#install.packages("car")
+```
+
+```{r}
+library(lmtest)
+library(ggplot2)
+library(GGally)
+library(dplyr)
+library(lessR)
+library(tidyverse)
+library(Hmisc)
+library(jmuOutlier)
+library(car)
+```
+
+## 1.
+# a)
+Wczytanie i obejrzenie danych
+
+```{r}
+
+file <- 'people.tab.csv'
+df <- read.csv(file,sep = "\t")
+
+head(df)
+
+str(df)
+
+```
+
+Podsumowanie danych
+
+```{r}
+
+df$plec <-as.factor(df$plec)
+df$budynek <-as.factor(df$budynek)
+df$stan_cywilny <-as.factor(df$stan_cywilny)
+
+summary(df)
+
+df.nonan <- na.omit(df)
+
+```
+
+Mamy 500 obserwacji, 6 zmiennych ilościowych i 3 jakościowe. Pośród zmiennych ilościowych mamy 1 zmienną dyskretną (liczba_dzieci) i 5 ciągłych, z kolei mamy 3 zmienne kategorialne nominalne (płeć, stan_cywilny i budynek), nie ma zmiennych kategorialnych porządkowych.
+
+# b)
+
+Zależności w zmiennych objaśniających.
+Uwaga: Ze wględu na to, że liczba_dzeci jest zmienną dyskretną, to tę zmienną rozpatrzymy osobno.
+
+```{r}
+
+ggpairs(df,columns = ,c('wiek','waga','wzrost','wydatki'), title ="Korelacje pomiędzy zmiennymi ilościowymi objaśniającymi.")
+
+```
+
+Na podstawie wyników widzimy, że skorelowane zmienne to: wydatki i wiek (corr = 0.179, znikoma korelacja), wydatki i wzrost (corr = -0.184, znikoma korelacja), wzrost i waga (corr = 0.698, średnia korelacja) oraz w zależności od poziomu istotności wydatki i waga (corr = -0.115, znikoma korelacja). W kontekście pozostałych par zmiennych, na podstawie naszych danych, nie możemy stwierdzić czy korelacja jest różna od 0.
+
+Z uwagi na no, że liczba_dzeci jest zmienną dyskretną, to lepszą opcją będzie test korelacji Kendella.
+
+```{r}
+columns.totest <- c("wiek","waga","wzrost","wydatki")
+
+cor.liczba_dzieciVSwiek <-  cor.test(df$liczba_dzieci, df$wiek, method = c("kendall"))
+cor.liczba_dzieciVSwaga <-  cor.test(df$liczba_dzieci, df$waga, method = c("kendall"))
+cor.liczba_dzieciVSwzrost <-  cor.test(df$liczba_dzieci, df$wzrost, method = c("kendall"))
+cor.liczba_dzieciVSwydatki <-  cor.test(df$liczba_dzieci, df$wydatki, method = c("kendall"))
+
+cor.liczba_dzieciVSwiek
+cor.liczba_dzieciVSwaga
+cor.liczba_dzieciVSwzrost
+cor.liczba_dzieciVSwydatki
+
+```
+
+Na podstawie powyższych wyników widzimy, że liczba_dzieci jest skorelowana z wydatkami ( corr = 0.46, niska korelacja).
+W kontekście pozostałych par zmiennych, na podstawie naszych danych, nie możemy stwierdzić czy korelacja jest różna od 0.
+
+Przejdźmy teraz do zmiennych jakościowych...
+
+```{r}
+
+ggpairs(columns = c('plec','budynek','stan_cywilny'), data = df, title = "Korelacja pomiędzy zmiennymi ilościowymi")
+
+```
+
+Przeprowadźmy testy
+
+```{r}
+
+ind.plecVSstan_cywilny <- fisher.test(df$plec, df$stan_cywilny)
+ind.plecVSbudynek <- chisq.test(df$plec, df$budynek)
+ind.budynekVSstan_cywilny <- chisq.test(df$budynek, df$stan_cywilny)
+
+ind.plecVSstan_cywilny
+ind.plecVSbudynek
+ind.budynekVSstan_cywilny
+
+```
+
+Na podstawie powyższych wyników widzimy, że nie odrzucamy hipotez zerowych o niezależności.
+
+# c)
+
+Braki w danych
+
+```{r}
+
+count.missing <- sum(is.na(df))
+count.missing
+
+```
+
+Widzimy, że mamy 38 brakujących danych. Wyświetlmy ponownie podsumowanie.
+
+```{r}
+
+summary(df)
+
+```
+
+Braki w danych pochodza z kolumny płeć.
+
+
+## 2.
+# a)
+
+Wykresy scatter-plot
+
+```{r}
+
+pairs(oszczednosci ~ wiek, data = df, main="Oszczędności vs Wiek")
+pairs(oszczednosci ~ waga, data = df, main="Oszczędności vs Waga")
+pairs(oszczednosci ~ wzrost, data = df, main="Oszczędności vs Wzrost")
+pairs(oszczednosci ~ liczba_dzieci, data = df, main="Oszczędności vs Liczba_dzieci")
+pairs(oszczednosci ~ wydatki, data = df, main="Oszczędności vs Wydatki")
+
+```
+# b)
+
+Box-plot
+```{r}
+
+ggplot(df.nonan, aes(plec,waga)) + 
+  geom_boxplot(outlier.colour="red", outlier.shape=8,
+                  outlier.size=4)+labs(title = "Waga by Plec")
+
+```
+# c)
+Pie chart
+```{r}
+count.by.liczba_dzieci <- df %>% count(liczba_dzieci, sort = TRUE)
+
+slices <- c(count.by.liczba_dzieci$n)
+lbls <- count.by.liczba_dzieci$liczba_dzieci
+
+pct <- round(slices/sum(slices)*100)
+pct
+lbls <- paste(lbls," dzieci: ", pct)
+lbls <- paste(lbls,"%",sep="")
+slices
+
+pie(slices,labels = lbls, col=rainbow(length(lbls)),
+   main="Pie chart liczba dzieci")
+
+```
+
+
+# d)
+Histogramy zmiennych ilościowych
+```{r}
+
+hist.data.frame(df[c('wiek','waga','wzrost','wydatki','liczba_dzieci','oszczednosci')])
+
+
+```
+
+
+
+## 3.
+
+# a)
+
+Test u0 = 170
+Skorzystamy z: Test istotności dla wartości średniej (B)- wykład 2 slajd 28
+Założenia testu: popluacja o rozkładzie normalnym, średnia i wariancja nieznane.
+Zatem musimy sprawdzić, czy populacja ma rozkład normalny, pozostałe założenia spełnione.
+
+Przywołajmy zatem ponownie histogram wzrostu.
+```{r}
+hist(df$wzrost)
+```
+
+a także qqplot...
+
+```{r}
+qqPlot(df$wzrost, ylab="Wzrost")
+```
+
+Na podstawie wykresów przyjmujemy, że populacja ma rozkład normalny.
+Zatem założenia spełnione, pora na test...
+
+```{r}
+# 
+
+u0 <- 170
+
+wzrost <- df$wzrost
+avg.wzrost <- mean(wzrost)
+
+n <- nrow(df) # liczba obserwacji
+
+
+Sn <- sqrt(1/n*sum((wzrost - avg.wzrost)^2)) # odchylenie standardowe z próby
+
+stat.T <- ( avg.wzrost - u0 ) / Sn * sqrt(n-1)
+
+#stat.T # to nasza statystyka testowa i faktycznie zgadza się z poniższym testem
+
+#t.test(wzrost,alternative = c("less"),mu = u0)
+
+p.value1 <- t.test(wzrost,alternative = c("less"),mu = u0)$p.value
+
+cat("Wartość p-value pierwszego testu ", p.value1)
+
+# "Przyjmijmy poziom istotności 0.05, to p-value wyszło mniejsze, zatem odrzucamy hipotezę zerową o tym, że średni wzrost to 170.
+
+```
+
+# b)
+
+Ponieważ mediana rozkładu normalnego jest równa wartości średniej rozkładu normalnego to możemy zrobić analogiczny test dla u0 = 165...
+
+```{r}
+
+u0 <- 165
+
+stat.T <- ( avg.wzrost - u0 ) / Sn * sqrt(n-1)
+
+#stat.T # ponownie to nasza statystyka testowa i faktycznie zgadza się z poniższym testem
+
+#t.test(wzrost,alternative = c("less"),mu = u0)
+
+p.value2 <- t.test(wzrost,alternative = c("less"),mu = u0)$p.value
+
+cat("Wartość p-value drugiego testu ", p.value2)
+
+
+```
+
+W przypadku drugiego testu założenia są identyczne i również są spełnione.
+
+## 4.
+
+# a)
+
+Podobnie jak wcześniej musimy sprawdzić założenie o tym, że populacja ma rozkład normalny, pozostałe założenia o tym, że nie znamy średniej i mediany oczywiście spełnione...
+
+```{r}
+hist(df$wiek)
+```
+
+```{r}
+qqPlot(df$wiek, ylab="Wiek")
+```
+
+Ponownie możemy przyjąć, że mamy do czynienia z populacją o rozkładzie normalym...
+
+```{r}
+
+wiek <- df$wiek
+avg.wiek <- mean(wiek)
+
+Sn <- sqrt(1/n*sum((wiek - avg.wiek)^2))
+
+error <- qt(0.995,df=n-1)*Sn/sqrt(n-1)
+
+left.u <- avg.wiek-error
+right.u <- avg.wiek+error
+
+cat("Przedział ufności dla wartości oczekiwanej to  (", left.u, ",",right.u,").")
+
+left.sd = sqrt(n/qchisq(0.995, df=n-1))*Sn
+right.sd = sqrt(n/qchisq(0.005, df=n-1))*Sn
+
+cat("Przedział ufności dla odchylenia standardowego to  (", left.sd, ",",right.sd,").")
+```
+
+
+# b)
+
+```{r}
+
+cat("Przedział ufności dla kwantyla 0.25 to: ",as.numeric(jmuOutlier::quantileCI(x=wiek, probs=0.25, conf.level=0.99)[1,c("lower","upper")]),"\n")
+cat("Przedział ufności dla kwantyla 0.5 to: ",as.numeric(jmuOutlier::quantileCI(x=wiek, probs=0.5, conf.level=0.99)[1,c("lower","upper")]),"\n")
+cat("Przedział ufności dla kwantyla 0.75 to: ",as.numeric(jmuOutlier::quantileCI(x=wiek, probs=0.75, conf.level=0.99)[1,c("lower","upper")]),"\n")
+
+```
+
+## 5.
+
+# a)
+
+Omówimy zmienną waga.
+
+```{r}
+
+df.wzwiazku <- df[df$stan_cywilny == TRUE, ] 
+df.niewzwiazku <- df[df$stan_cywilny == FALSE, ] 
+head(df.wzwiazku)
+```
+
+Do testu 2 średnich potrzebujemy, aby populacja była rozkładu normalnego, konieczna jest również równość wariancji.
+Sprawdźmy najpierw czy zmienna waga obu populacji ma rozklad normalny...
+
+```{r}
+hist(df.wzwiazku$waga)
+hist(df.niewzwiazku$waga)
+```
+
+```{r}
+qqPlot(df.wzwiazku$waga, ylab="Waga")
+qqPlot(df.niewzwiazku$waga, ylab="Waga")
+```
+
+Na podstawie wyników przyjmujemy, że mają rozkłady normalne.
+
+Teraz dokonamy testu równości wariancji.
+H_0 - wariancje są równe, H_1 - wariancje nie są równe
+
+```{r}
+var.test(x = df.wzwiazku$waga, y = df.niewzwiazku$waga, alternative = "two.sided")
+```
+
+p-value > 0.01 więc nie odrzucamy hipotezy o równości wariancji.
+
+Teraz bieżemy się za test t równości średnich...
+
+```{r}
+t.test(df.wzwiazku$waga, df.niewzwiazku$waga, var.equal = TRUE)
+```
+
+p-value >> 0.01 zatem nie odrzucamy hipotezy zerowej o tym, że średnia waga dla obu grup jest równa.
+
+# b)
+
+H_0 - zmienna waga nie jest zależna od zmiennej wzrost, H_1 - waga jest zależna od wzrostu
+
+Współczynnik korelacji Pearsona mierzy relację między dwiema zmiennymi ciągłymi...
+Jego założenia: 
+1. obie zmienne ciągłe | ok
+2. Między dwiema zmiennymi istnieje liniowa zależność.
+3. Brak znaczących wartości odstających
+4. Zmienne mają rozkład normalny | ok, to wiemy z poprzednich rozważań
+
+
+To odnieśmy się do 2 i 3:
+```{r}
+
+pairs(waga ~ wzrost, data = df, main="Waga vs Wzrost")
+
+```
+
+Widzimy, że punkty na scatter plocie faktycznie układają się w pewnym stopniu w linię, a także nie ma wartości, które w dużym stopniu starały się odbiegać od naszej "prawie linii".
+
+Zatem przejdźmy do testu...
+
+```{r}
+
+cor.test(df$waga, df$wzrost, method="pearson")
+
+```
+
+Ponieważ p-value << 0.01 to odrzucamy hipotezę zerową o braku zależności.
+
+# c)
+Porównajmy zmienne budynek i stan_cywilny
+Skorzystamy z testu chi-square. Test ten służy do określenia, czy dwie zmienne kategoryczne są niezależne. 
+Założenia:
+1. Obie zmienne kategoryczne | ok
+2. Oczekiwana wartość komórek powinna wynosić 5 lub więcej w co najmniej 80% komórek:
+3. Komórki w tabeli kontyngencji wzajemnie się wykluczają.
+
+Sprawdźmy 2 i 3:
+
+```{r}
+con_table <- table(df$stan_cywilny, df$budynek)
+con_table
+
+```
+
+Zgadza się. Przeprowadźmi test chi-square:
+H_0 - nie ma zależności pomiędzy zmiennymi, H_1 - jest zależność pomiędzy zmiennymi
+
+```{r}
+chisq.test(df$budynek, df$stan_cywilny)
+```
+p-value > 0.01, zatem nie odrzucamy hipotezy zerowej o tym, że nie ma zależności.
+
+# d) Test Kołmogorowa-Smirnowa dla 2 prób dla zmiennej oszczednosci vs exp(3)
+Założenia:
+1. Test jest dokładny tylko dla zmiennych ciągłych. | ok
+
+H_0 - oszczednosci mają rozklad exp z parametrem 3, H_1 - oszczednosci nie maja rozkladu exp z parametrem 3
+
+
+```{r}
+
+sample.exp.distribution <- rexp(600, rate = 3) # tworzymy wektor z rozkładu wykładniczego z parametrem 3
+
+ks.test(df$oszczednosci, sample.exp.distribution)
+
+```
+p <<< 0.01, zatem odrzucamy hipotezę zerową.
+
+## 6.
+
+Model regresji
+
+```{r}
+
+linear.regression <- lm(oszczednosci ~ ., df)
+summary(linear.regression)
+
+```
+
+Gdzie w kolumnie Estimate widzimy wyestymowane współczynniki przy danych zmiennych.
+
+# a) 
+
+Czy transformacja zmiennych jest konieczna?
+
+```{r}
+
+plot(linear.regression, which = 1)
+
+```
+
+Na pierwszym wykresie widzimy czerwoną linię oznaczającą trend. Jest on liniowy, zatem nie ma potrzeby transformacji zmiennych objasniających.
+
+Teraz przyjrzymy się zmiennej objaśnianej.
+
+```{r}
+
+hist(df$oszczednosci)
+qqPlot(df$oszczednosci)
+
+```
+
+Na podstawie wykresów stwierdzamy, że nie ma potrzeby transformacji zmiennej objaśnianej, bo rozkład możemy uznać za normalny.
+
+# b)
+
+```{r}
+
+linear.regression.rss <- deviance(linear.regression)
+cat("RSS wynosi",linear.regression.rss,"\n\n")
+
+linear.regression.rsquared <- summary(linear.regression)$r.squared
+
+cat("R^2 wynosi",linear.regression.rsquared,"\n\n")
+
+cat("p-wartości: ","\n\n")
+summary(linear.regression)$coefficients[,4]  
+
+cat("\n\n","Oszacowania współczynników w modelu pełnym: ","\n\n")
+linear.regression$coefficients
+
+```
+
+# c)
+Stwórzmy modele bez poszczególnych zmiennych.
+
+```{r}
+
+lr.no.wiek <- lm(oszczednosci ~ .-wiek, df)
+lr.no.waga <- lm(oszczednosci ~ .-waga, df)
+lr.no.wzrost <- lm(oszczednosci ~ .-wzrost, df)
+lr.no.plec <- lm(oszczednosci ~ .-plec, df)
+lr.no.stan_cywilny <- lm(oszczednosci ~ .-stan_cywilny, df)
+lr.no.liczba_dzieci <- lm(oszczednosci ~ .-liczba_dzieci, df)
+lr.no.budynek <- lm(oszczednosci ~ .-budynek, df)
+lr.no.wydatki <- lm(oszczednosci ~ .-wydatki, df)
+
+```
+
+Poszczególne p-wartości znamy z wcześniejszych rozważań, przyjrzyjmy się teraz zmianom w R^2:
+
+```{r}
+
+
+cat("zmiana R^2 dla zmiennej WIEK",linear.regression.rsquared-summary(lr.no.wiek)$r.squared,"\n")
+cat("zmiana R^2 dla WAGA",linear.regression.rsquared-summary(lr.no.waga)$r.squared,"\n")
+cat("zmiana R^2 dla WZROST",linear.regression.rsquared-summary(lr.no.wzrost)$r.squared,"\n")
+cat("zmiana R^2 dla PLEC",linear.regression.rsquared-summary(lr.no.plec)$r.squared,"\n")
+cat("zmiana R^2 dla STAN_CYWILNY",linear.regression.rsquared-summary(lr.no.stan_cywilny)$r.squared,"\n")
+cat("zmiana R^2 dla LICZBA_DZIECI",linear.regression.rsquared-summary(lr.no.liczba_dzieci)$r.squared,"\n")
+cat("zmiana R^2 dla BUDYNEK",linear.regression.rsquared-summary(lr.no.budynek)$r.squared,"\n")
+cat("zmiana R^2 dla WYDATKI",linear.regression.rsquared-summary(lr.no.wydatki)$r.squared,"\n")
+
+```
+
+Zatem najmniejszą różnicę w R^2 dostajemy dla zmiennej płeć.
+
+Sprawdźmy teraz RSS...
+
+```{r}
+
+cat("zmiana RSS dla zmiennej WIEK",(deviance(lr.no.wiek)-linear.regression.rss),"\n")
+cat("zmiana RSS dla zmiennej WAGA",(deviance(lr.no.waga)-linear.regression.rss),"\n")
+cat("zmiana RSS dla zmiennej WZROST",(deviance(lr.no.wzrost)-linear.regression.rss),"\n")
+cat("zmiana RSS dla zmiennej PLEC",(deviance(lr.no.plec)-linear.regression.rss),"\n")
+cat("zmiana RSS dla zmiennej STAN_CYWILNY",(deviance(lr.no.stan_cywilny)-linear.regression.rss),"\n")
+cat("zmiana RSS dla zmiennej LICZBA_DZIECI",(deviance(lr.no.liczba_dzieci)-linear.regression.rss),"\n")
+cat("zmiana RSS dla zmiennej BUDYNEK",(deviance(lr.no.budynek)-linear.regression.rss),"\n")
+cat("zmiana RSS dla zmiennej",(deviance(lr.no.wydatki)-linear.regression.rss),"\n")
+
+```
+
+Zatem najmniejszą różnicę w RSS dostajemy dla zmiennej płeć.
+
+Także jak pamiętamy p-value było dla tej zmiennej najwyższe ( 0.886 ) w pełnym modelu , a zatem na podstawie powyższych rozważań stwierdzamy, że zmienną objaśniającą, którą można by z pełnego modelu odrzucić jest zmienna płeć.
+
+# d)
+
+W dalszych rozważaniach pozostańmy przy modelu bez zmiennej płeć...
+
+```{r}
+
+summary(lr.no.plec)
+
+```
+
+Gdzie w pierwszej kolumnie Estimate wyestymowane współczynniki przy danych zmiennych.
+
+Założenia:
+1. Istnieje liniowa zależność między zmiennymi objaśniającymi a zmienną objaśnianą.
+2. Zmienne objaśniające są niezależne i obserowawane z pomijalnym błędem.
+3. Średnia wartość residuów wynosi 0.
+4. Residua są o stałej wariancji.
+5. Residua są niezależne. ( to założenie wymaga od nas wiedzy o tym czy dane zostały zasymulowane w sposób niezalażny, zatem tego nie zweryfikujemy )
+
+Zatem sprawdźmy...
+
+Najpierw 1 i 3:
+```{r}
+
+plot(lr.no.plec, which=1)
+
+```
+
+Widzimy, że czerwona linia jest położona niemal poziomo na 0, dzięki czemu stwierdzamy, że istnieje liniowa zależność oraz średnia wartość redisuów faktycznie wynosi 0.
+
+Sprawdzimy 2 przy pomocy testu Durbina Warsona:
+H_0 - błędy są niezależne, H_1- błędy są niezależne
+
+```{r}
+
+durbinWatsonTest(lr.no.plec)
+
+```
+
+Ponieważ p-value >> 0.05, to nie odrzucamy hipotezy zerowej.
+
+Teraz 4...
+
+```{r}
+plot(lr.no.plec, which=3)
+```
+
+Residua są mniej więcej równomiernie rozłożone wokół czerwonej linii, co może świadczyć o stałej wariancji.
+
+# e) 
+
+Wykres zależności reszt od zmiennej objaśnianej już omawialiśmy 
+
+Wykres reszt studentyzowanych i dźwigni:
+
+```{r}
+
+plot(lr.no.plec, which=5)
+
+```
+
+Ten wykres służy do wykrywania obserwacji odstających. Naszą uwagę szczególnie powinny przykuć te, które są położone poza obszarem wydzielonym przez linię przerywaną, której tutaj jednak nie dostrzeżemy. Stąd możemy uznać, że w danych nie ma obserwacji odstających.
+
+
+
+## Bibliografia:
+- Statystyczna analiza danych (Mat) 21/22.L
+- towardsdatascience
+- influentialpoints
+- wikipedia
+- stats.stackexchange
+- rcodumentation
+- statology
+- medium
+- dataanalytics
+- statistics.laerd
+- youtube channel:  MarinStatsLectures-R Programming & Statistics
+- godatadrive
+
